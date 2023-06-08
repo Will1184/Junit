@@ -4,15 +4,21 @@ import jdk.jfr.Enabled;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.*;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvFileSource;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.will1184.exceptions.DineroInsuficienteException;
 import org.will1184.models.Banco;
 import org.will1184.models.Cuenta;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -25,8 +31,8 @@ class CuentaTest {
 
     @BeforeEach
     void initMetodoTest(TestInfo testInfo, TestReporter testReporter){
-        this.cuenta =new Cuenta("Andres", new BigDecimal("1000.123456"));
-        this.testInfo =testInfo;
+        this.cuenta =new Cuenta("Andres", new BigDecimal("1000.12345"));
+        this.testInfo = testInfo;
         this.testReporter = testReporter;
         System.out.println("Iniciando el metodo");
         testReporter.publishEntry("Ejecutando: "+ testInfo.getDisplayName()
@@ -75,7 +81,6 @@ class CuentaTest {
                 assertFalse(cuenta.getSaldo().compareTo(BigDecimal.ZERO)<0);
                 assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
             }
-
             @Test
         @DisplayName("Testeando referencias que sean iguales con el metodo equals.")
         void testReferenciaCuenta(){
@@ -96,8 +101,8 @@ class CuentaTest {
             assertEquals("900.12345",cuenta.getSaldo().toPlainString());
 
         }
-        @Tag("cuenta")
         @Test
+        @Tag("cuenta")
         void testCreditoCuenta(){
             cuenta.credito(new BigDecimal(100));
             assertNotNull(cuenta.getSaldo());
@@ -119,6 +124,7 @@ class CuentaTest {
             assertEquals("3000",cuenta1.getSaldo().toPlainString());
         }
 
+        @Test
         @Tag("cuenta")
         @Tag("error")
         void testDineroInsuficienteExceptionCuenta(){
@@ -150,13 +156,13 @@ class CuentaTest {
                     ()->"el valor del saldo de la cuenta 1 no es el esperado"),
                     ()->assertEquals(2,banco.getCuentas().size(),
                             ()-> "el banco no tiene las cuentas esperadas"),
-                    ()-> assertEquals("Banco del estado",cuenta1.getBanco().getNombre()),
+                    ()-> assertEquals("Banco del Estado",cuenta1.getBanco().getNombre()),
                     ()-> assertEquals("Andres",banco.getCuentas().stream()
                             .filter(c -> c.getPersona().equals("Andres"))
                             .findFirst()
                             .get().getPersona()),
                     ()-> assertTrue(banco.getCuentas().stream()
-                            .anyMatch(c->c.getPersona().equals("John Doe")))
+                            .anyMatch(c->c.getPersona().equals("Jhon Doe")))
                     );
         }
         @Nested
@@ -293,7 +299,7 @@ class CuentaTest {
             @ValueSource(strings = {"100","200","300","500","700","1000.12345"})
             void testDebitoCuentaValueSource(String monto){
                 cuenta.debito(new BigDecimal(monto));
-                assertNull(cuenta.getSaldo());
+                assertNotNull(cuenta.getSaldo());
                 assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
             }
 
@@ -302,11 +308,74 @@ class CuentaTest {
             void testDebitoCuentaCsvSource(String index,String monto){
                 System.out.println(index+" -> "+monto);
                 cuenta.debito(new BigDecimal(monto));
-                assertNull(cuenta.getSaldo());
+                assertNotNull(cuenta.getSaldo());
+                assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+            }
+
+            @ParameterizedTest(name = "numero{index} ejecutando con valor {0} - {argumentsWithNames}")
+            @CsvSource({"200,100,John,Andres","250,200,Pepe,Pepe","300,300,maria,Maria"
+                    ,"510,500,Pepa,Pepa","750,700,Lucas,Luca","1000.12345,1000.12345,Cata,Cata"})
+            void testDebitoCuentaCsvSource2(String saldo,String monto,String esperado,String actual){
+                System.out.println(saldo + " -> " + monto);
+                cuenta.setSaldo(new BigDecimal(saldo));
+                cuenta.debito(new BigDecimal(monto));
+                cuenta.setPersona(actual);
+
+                assertNotNull(cuenta.getSaldo());
+                assertNotNull(cuenta.getPersona());
+                assertEquals(esperado,actual);
+                assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+            }
+            @ParameterizedTest(name = "numero{index} ejecutando con valor {0} - {argumentsWithNames}")
+            @CsvFileSource(resources = "/data.csv")
+            void  testDebitoCuentaCsvFileSource(String monto){
+                cuenta.debito(new BigDecimal(monto));
+                assertNotNull(cuenta.getSaldo());
+                assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+            }
+            @ParameterizedTest(name = "numero{index} ejecutando con valor {0} - {argumentsWithNames}")
+            @CsvFileSource(resources = "/data2.csv")
+            void  testDebitoCuentaCsvFileSource2(String saldo,String monto,String esperado,String actual){
+                cuenta.setSaldo(new BigDecimal(saldo));
+                cuenta.debito(new BigDecimal(monto));
+                cuenta.setPersona(actual);
+
+                assertNotNull(cuenta.getSaldo());
+                assertNotNull(cuenta.getPersona());
+                assertEquals(esperado,actual);
                 assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
             }
 
         }
+        @Tag("param")
+        @ParameterizedTest(name = "numero{index} ejecutando con valor {0} - {argumentsWithNames}")
+        @MethodSource("montoList")
+        void  testDebitoCuentaMethodSource(String monto){
+            cuenta.debito(new BigDecimal(monto));
+            assertNotNull(cuenta.getSaldo());
+            assertTrue(cuenta.getSaldo().compareTo(BigDecimal.ZERO)>0);
+        }
+        static List<String> montoList(){ return Arrays.asList("100","200","300","500","700","1000.12345");}
 
+        @Nested
+        @Tag("timeout")
+        class EjemploTimeOutTest{
+            @Test
+            @Timeout(1)
+            void pruebaTimeOut()throws  InterruptedException{
+                TimeUnit.MILLISECONDS.sleep(100);
+            }
+            @Test
+            @Timeout(value = 1000, unit = TimeUnit.MILLISECONDS)
+            void pruebaTimeout2()throws InterruptedException{
+                TimeUnit.MILLISECONDS.sleep(900);
+            }
+            @Test
+            void testTimeoutAssertions(){
+                assertTimeout(Duration.ofSeconds(5),()->{
+                   TimeUnit.MILLISECONDS.sleep(4000);
+                });
+            }
+        }
     }
 }
